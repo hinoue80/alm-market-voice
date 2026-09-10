@@ -110,8 +110,8 @@ def _ingest_source(_unused_db: Session, source: Source) -> dict[str, int]:
     else:
         raw = connector(source.url)
     raw_signals = [clean_signal(s) for s in raw]
-    # Drop signals with empty body after noise filtering
-    raw_signals = [s for s in raw_signals if len(s.get("body", "").strip()) >= 50]
+    # Drop signals with empty body after noise filtering (20 chars = at least a meaningful title)
+    raw_signals = [s for s in raw_signals if len(s.get("body", "").strip()) >= 20]
     logger.info("Source '%s': fetched %d raw signals (after noise filter)", source.name, len(raw_signals))
 
     db = SessionLocal()

@@ -58,10 +58,15 @@ def fetch_rss(url: str, source_type: str = "rss") -> list[dict[str, Any]]:
 
         for entry in feed.entries[:30]:  # cap at 30 most recent per feed
             title = entry.get("title") or ""
-            summary = entry.get("summary") or entry.get("content", [{}])[0].get("value", "")
+            summary = (
+                entry.get("summary")
+                or (entry.get("content") or [{}])[0].get("value", "")
+                or ""
+            )
             link = entry.get("link") or ""
 
-            body = f"{title}. {summary}"
+            # Build body: title + summary if available, otherwise title alone
+            body = f"{title}. {summary}".strip(". ") if summary.strip() else title
 
             # Pre-filter: only keep entries with at least one relevance keyword
             body_lower = body.lower()
