@@ -78,8 +78,9 @@ def run_ingestion(source_ids: list[int] | None = None) -> dict[str, Any]:
         def _fetch_one(source):
             return source, _ingest_source(db, source)
 
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            futures = {pool.submit(_fetch_one, s): s for s in fast_sources}
+        pool = ThreadPoolExecutor(max_workers=8)
+        futures = {pool.submit(_fetch_one, s): s for s in fast_sources}
+        try:
             for future in as_completed(futures, timeout=90):
                 try:
                     source, fetched = future.result(timeout=60)
@@ -91,6 +92,10 @@ def run_ingestion(source_ids: list[int] | None = None) -> dict[str, Any]:
                     msg = f"Source '{src.name}' failed: {exc}"
                     logger.error(msg)
                     summary["errors"].append(msg)
+        except TimeoutError:
+            logger.warning("Ingest timed out after 90s — proceeding with partial results")
+        finally:
+            pool.shutdown(wait=False)  # don't block — let hanging threads die on their own
 
         # Rebuild topic rollup for current week
         rebuild_topic_summaries(db)
