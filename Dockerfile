@@ -38,7 +38,6 @@ USER appuser
 
 EXPOSE 8000
 
-# Production: no --reload, 2 workers
-# Note: SQLite + multiple workers is safe because WAL mode allows concurrent reads,
-# and we use a pool_size=1 per worker to avoid write contention.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Production: 1 worker — SQLite is single-writer and in-memory state (ingest status)
+# must be consistent. Scale horizontally only when migrating to PostgreSQL.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
