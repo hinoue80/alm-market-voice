@@ -66,14 +66,23 @@ def run_ingestion(source_ids: list[int] | None = None) -> dict[str, Any]:
         logger.info("Starting ingestion for %d sources (parallel fetch)", len(sources))
 
         # Fetch all sources in parallel — each connector is I/O-bound (HTTP)
+        # Skip conference/crawl sources on first pass — Tavily crawl can hang for minutes
+        _FAST_TYPES = {"practitioner_community", "rss", "trade_media", "practitioner_pub",
+                       "reddit", "community", "industry_news"}
+        fast_sources = [s for s in sources if s.source_type in _FAST_TYPES]
+        slow_sources = [s for s in sources if s.source_type not in _FAST_TYPES]
+
+        if slow_sources:
+            logger.info("Deferring %d slow/crawl sources (conference etc.)", len(slow_sources))
+
         def _fetch_one(source):
             return source, _ingest_source(db, source)
 
-        with ThreadPoolExecutor(max_workers=10) as pool:
-            futures = {pool.submit(_fetch_one, s): s for s in sources}
-            for future in as_completed(futures, timeout=120):  # max 2 min total
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {pool.submit(_fetch_one, s): s for s in fast_sources}
+            for future in as_completed(futures, timeout=90):
                 try:
-                    source, fetched = future.result(timeout=90)  # max 90s per source
+                    source, fetched = future.result(timeout=60)
                     summary["total_fetched"] += fetched["fetched"]
                     summary["total_saved"] += fetched["saved"]
                     summary["sources_processed"] += 1
