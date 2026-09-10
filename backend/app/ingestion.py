@@ -107,6 +107,8 @@ def _ingest_source(_unused_db: Session, source: Source) -> dict[str, int]:
     Fetch and save signals for a single source.
     Opens its own DB session so this function is safe to call from a thread pool.
     """
+    import signal as _signal
+
     connector = CONNECTOR_MAP.get(source.source_type)
     if connector is None:
         logger.warning("No connector for source_type '%s'", source.source_type)
@@ -114,10 +116,14 @@ def _ingest_source(_unused_db: Session, source: Source) -> dict[str, int]:
 
     # RSS-based connectors accept source_type to tune the recency gate
     _rss_types = {"rss", "community", "industry_news", "trade_media", "practitioner_pub"}
-    if source.source_type in _rss_types:
-        raw = connector(source.url, source_type=source.source_type)
-    else:
-        raw = connector(source.url)
+    try:
+        if source.source_type in _rss_types:
+            raw = connector(source.url, source_type=source.source_type)
+        else:
+            raw = connector(source.url)
+    except Exception as exc:
+        logger.warning("Connector failed for '%s': %s", source.name, exc)
+        return {"fetched": 0, "saved": 0}
     raw_signals = [clean_signal(s) for s in raw]
     # Drop signals with empty body after noise filtering (20 chars = at least a meaningful title)
     raw_signals = [s for s in raw_signals if len(s.get("body", "").strip()) >= 20]

@@ -21,7 +21,7 @@ HEADERS = {
 }
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+@retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=1, max=5))
 def fetch_reddit_json(url: str) -> list[dict[str, Any]]:
     """
     Fetch top posts from a subreddit using Reddit's public JSON endpoint.
@@ -30,7 +30,7 @@ def fetch_reddit_json(url: str) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
 
     try:
-        response = httpx.get(url, headers=HEADERS, timeout=20, follow_redirects=True)
+        response = httpx.get(url, headers=HEADERS, timeout=10, follow_redirects=True)
         response.raise_for_status()
         data = response.json()
 
@@ -86,12 +86,12 @@ def _tavily_fallback(reddit_url: str) -> list[dict[str, Any]]:
             "https://api.tavily.com/search",
             json={
                 "query": query,
-                "max_results": 8,
+                "max_results": 5,
                 "search_depth": "basic",
                 "include_answer": False,
             },
             headers={"Authorization": f"Bearer {settings.tavily_api_key}"},
-            timeout=15,
+            timeout=10,
         )
         resp.raise_for_status()
         items = resp.json().get("results", [])
