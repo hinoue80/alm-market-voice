@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: alm-market-voice-api
+    runtime: docker
+    # Render builds from the Dockerfile at the repo root.
+    # The image bundles the FastAPI backend + pre-built React frontend (VITE_API_URL='').
+    # Because VITE_API_URL is empty the frontend uses relative URLs → same origin.
+    # GitHub Pages hosts a separate frontend build that sets VITE_API_URL to this service's URL.
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free          # free tier — spins down after 15 min inactivity, ~30s cold start
+    region: oregon      # us-west-2; change to frankfurt if EU data residency matters
+
+    # Persistent disk keeps SQLite data across deploys / restarts.
+    # Free tier allows one disk up to 1 GB.
+    disk:
+      name: alm-data
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      # Secret values — set these in the Render dashboard after first deploy:
+      #   WATSONX_API_KEY, WATSONX_PROJECT_ID, TAVILY_API_KEY, SECRET_KEY
+      - key: WATSONX_API_KEY
+        sync: false          # "sync: false" = Render prompts you to enter it manually
+      - key: WATSONX_PROJECT_ID
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true  # Render auto-generates a random secret
+      - key: DATABASE_URL
+        value: sqlite:////data/alm_market_voice.db
+      # Disable Ollama in production (not available on Render)
+      - key: OLLAMA_HOST
+        value: ""
