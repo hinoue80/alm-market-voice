@@ -5,18 +5,19 @@ from sqlalchemy import (
     ForeignKey, UniqueConstraint, create_engine, event
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
+from sqlalchemy.pool import NullPool
 from app.config import settings
 
 
 def _make_engine():
     url = settings.database_url
     if url.startswith("sqlite"):
-        # SQLite: single connection, WAL mode for better concurrency, no pool
+        # SQLite with NullPool: each thread gets its own connection — no pool contention.
+        # WAL mode allows concurrent readers with one writer, so this is safe.
         eng = create_engine(
             url,
             connect_args={"check_same_thread": False},
-            pool_size=1,
-            max_overflow=0,
+            poolclass=NullPool,
         )
         # Enable WAL and foreign keys on every new connection
         @event.listens_for(eng, "connect")
