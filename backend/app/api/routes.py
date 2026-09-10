@@ -493,21 +493,53 @@ def ingestion_status():
 
 @router.get("/ingest/debug")
 def ingest_debug():
-    """Diagnose connector output for a single source — returns first 3 signals with body lengths."""
+    """Full diagnostic: test RSS fetch + DB write in one call."""
     from app.connectors import fetch_rss, clean_signal
+    from app.models import SessionLocal, Signal, Source
+    from datetime import datetime
+
+    # 1. Test RSS fetch
     url = "https://news.google.com/rss/search?q=asset+management+maintenance+reliability"
     raw = fetch_rss(url, source_type="trade_media")
     cleaned = [clean_signal(r) for r in raw]
+    passed = [s for s in cleaned if len(s.get("body", "").strip()) >= 20]
+
+    # 2. Test DB write — try inserting one dummy signal
+    db_error = None
+    db_write_ok = False
+    try:
+        db = SessionLocal()
+        test_source = db.query(Source).first()
+        if test_source and passed:
+            s = passed[0]
+            existing = db.query(Signal).filter_by(url=s["url"]).first()
+            if existing is None:
+                db.add(Signal(
+                    source_id=test_source.id,
+                    external_id=s.get("external_id", "debug_test"),
+                    title=s.get("title", "")[:500],
+                    body=s.get("body", ""),
+                    url=s["url"][:1000],
+                    published_at=s.get("published_at") or datetime.utcnow(),
+                    collected_at=datetime.utcnow(),
+                    topics=[], sentiment="neutral", relevance_score=0.0,
+                    signal_type="general", enriched=0,
+                ))
+                db.commit()
+                db_write_ok = True
+            else:
+                db_write_ok = "already_exists"
+        db.close()
+    except Exception as exc:
+        db_error = str(exc)
+
     return {
-        "raw_count": len(raw),
-        "after_clean": len(cleaned),
-        "passed_20": sum(1 for s in cleaned if len(s.get("body", "").strip()) >= 20),
-        "passed_50": sum(1 for s in cleaned if len(s.get("body", "").strip()) >= 50),
-        "samples": [
-            {"title": s["title"][:80], "body_len": len(s.get("body", "").strip()),
-             "body_preview": s.get("body", "")[:150]}
-            for s in cleaned[:3]
-        ],
+        "rss_raw": len(raw),
+        "rss_passed_filter": len(passed),
+        "db_write_ok": db_write_ok,
+        "db_error": db_error,
+        "sample_title": passed[0]["title"][:80] if passed else None,
+        "sample_body_len": len(passed[0].get("body","").strip()) if passed else 0,
     }
 
 
