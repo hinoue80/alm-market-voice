@@ -174,13 +174,16 @@ def _ingest_source(_unused_db: Session, source: Source) -> dict[str, int]:
                 if existing is None:
                     db.add(Signal(**signal_data))
                     saved += 1
+                    logger.info("  → saved: %s", signal_data["title"][:60])
                 else:
                     existing.collected_at = signal_data["collected_at"]
+                    logger.info("  → duplicate skipped: %s", signal_data["title"][:60])
 
             except Exception as exc:
-                logger.warning("Failed to save signal from '%s': %s", source.name, exc)
+                logger.error("Failed to save signal from '%s': %s — data=%s", source.name, exc, {k: str(v)[:50] for k, v in signal_data.items() if k in ("url","title","external_id")})
 
         db.commit()
+        logger.info("Source '%s': committed %d signals", source.name, saved)
     finally:
         db.close()
 
