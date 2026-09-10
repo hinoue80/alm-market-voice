@@ -54,7 +54,7 @@ def fetch_review_page(url: str) -> list[dict[str, Any]]:
 
 # ── Internal helpers ─────────────────────────────────────────────────────────
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=15))
+@retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=8))
 def _tavily_crawl(url: str, instructions: str, limit: int = 5) -> list[dict[str, Any]]:
     if not settings.tavily_api_key:
         logger.warning("TAVILY_API_KEY not set — skipping crawl for %s", url)
@@ -72,7 +72,7 @@ def _tavily_crawl(url: str, instructions: str, limit: int = 5) -> list[dict[str,
                 "format": "markdown",
             },
             headers={"Authorization": f"Bearer {settings.tavily_api_key}"},
-            timeout=60,
+            timeout=20,
         )
         resp.raise_for_status()
         pages = resp.json().get("results", [])

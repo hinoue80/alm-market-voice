@@ -71,9 +71,9 @@ def run_ingestion(source_ids: list[int] | None = None) -> dict[str, Any]:
 
         with ThreadPoolExecutor(max_workers=10) as pool:
             futures = {pool.submit(_fetch_one, s): s for s in sources}
-            for future in as_completed(futures):
+            for future in as_completed(futures, timeout=120):  # max 2 min total
                 try:
-                    source, fetched = future.result()
+                    source, fetched = future.result(timeout=90)  # max 90s per source
                     summary["total_fetched"] += fetched["fetched"]
                     summary["total_saved"] += fetched["saved"]
                     summary["sources_processed"] += 1
