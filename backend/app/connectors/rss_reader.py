@@ -50,7 +50,10 @@ def fetch_rss(url: str, source_type: str = "rss") -> list[dict[str, Any]]:
     )
     cutoff = datetime.utcnow() - timedelta(days=max_age)
 
+    import time
     try:
+        # Small jitter to spread requests and avoid rate-limit on shared IPs
+        time.sleep(0.5)
         feed = feedparser.parse(url)
         if feed.bozo and not feed.entries:
             logger.warning("RSS feed parse error for %s: %s", url, feed.bozo_exception)

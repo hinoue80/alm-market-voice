@@ -78,22 +78,25 @@ def run_ingestion(source_ids: list[int] | None = None) -> dict[str, Any]:
         def _fetch_one(source):
             return source, _ingest_source(db, source)
 
-        pool = ThreadPoolExecutor(max_workers=8)
+        # Use a small worker pool to avoid hammering Google News with parallel requests
+        # (Render's shared IP gets rate-limited quickly with > 3 concurrent GNews requests)
+        pool = ThreadPoolExecutor(max_workers=3)
         futures = {pool.submit(_fetch_one, s): s for s in fast_sources}
         try:
-            for future in as_completed(futures, timeout=90):
+            for future in as_completed(futures, timeout=180):
                 try:
-                    source, fetched = future.result(timeout=60)
+                    source, fetched = future.result(timeout=30)
                     summary["total_fetched"] += fetched["fetched"]
                     summary["total_saved"] += fetched["saved"]
                     summary["sources_processed"] += 1
+                    logger.info("✓ %s: fetched=%d saved=%d", source.name, fetched["fetched"], fetched["saved"])
                 except Exception as exc:
                     src = futures[future]
                     msg = f"Source '{src.name}' failed: {exc}"
-                    logger.error(msg)
+                    logger.warning(msg)
                     summary["errors"].append(msg)
         except TimeoutError:
-            logger.warning("Ingest timed out after 90s — proceeding with partial results")
+            logger.warning("Ingest timed out after 180s — proceeding with partial results (%d/%d sources)", summary["sources_processed"], len(fast_sources))
         finally:
             pool.shutdown(wait=False)  # don't block — let hanging threads die on their own
 
