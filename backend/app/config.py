@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     secret_key: str = "change-me"
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5173,https://hinoue80.github.io"
 
     @property
     def cors_origins_list(self) -> list[str]:
