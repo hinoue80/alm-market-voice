@@ -491,6 +491,26 @@ def ingestion_status():
     return _last_ingestion or {"status": "never_run"}
 
 
+@router.get("/ingest/debug")
+def ingest_debug():
+    """Diagnose connector output for a single source — returns first 3 signals with body lengths."""
+    from app.connectors import fetch_rss, clean_signal
+    url = "https://news.google.com/rss/search?q=asset+management+maintenance+reliability"
+    raw = fetch_rss(url, source_type="trade_media")
+    cleaned = [clean_signal(r) for r in raw]
+    return {
+        "raw_count": len(raw),
+        "after_clean": len(cleaned),
+        "passed_20": sum(1 for s in cleaned if len(s.get("body", "").strip()) >= 20),
+        "passed_50": sum(1 for s in cleaned if len(s.get("body", "").strip()) >= 50),
+        "samples": [
+            {"title": s["title"][:80], "body_len": len(s.get("body", "").strip()),
+             "body_preview": s.get("body", "")[:150]}
+            for s in cleaned[:3]
+        ],
+    }
+
+
 _reenrich_status: dict[str, Any] = {}
 
 
