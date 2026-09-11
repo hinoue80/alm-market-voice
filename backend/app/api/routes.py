@@ -260,8 +260,10 @@ def get_demand_signals(
     signals = q.all()
 
     # ── helper: kebab-case label → human-readable display label ──────────────
+    _ABBREVS = {"ai", "iot", "iiot", "eam", "cmms", "esg", "ot", "it", "roi", "tco", "fm", "hvac"}
+
     def _display(label: str) -> str:
-        return " ".join(w.capitalize() for w in label.split("-"))
+        return " ".join(w.upper() if w in _ABBREVS else w.capitalize() for w in label.split("-"))
 
     # Aggregate by demand_signal label
     buckets: dict[str, dict] = defaultdict(lambda: {
@@ -363,7 +365,8 @@ def list_demand_signal_labels(db: Session = Depends(get_db)):
     )
     labels = [r[0] for r in rows]
     def _display(label: str) -> str:
-        return " ".join(w.capitalize() for w in label.split("-"))
+        _ABBREVS = {"ai", "iot", "iiot", "eam", "cmms", "esg", "ot", "it", "roi", "tco", "fm", "hvac"}
+        return " ".join(w.upper() if w in _ABBREVS else w.capitalize() for w in label.split("-"))
     return [{"label": l, "display_label": _display(l)} for l in labels]
 
 
