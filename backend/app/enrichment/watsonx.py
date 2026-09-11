@@ -497,48 +497,205 @@ def _parse_response(raw: str) -> dict[str, Any]:
 
 # ── Keyword fallback ──────────────────────────────────────────────────────────
 
+# ── Demand signal patterns for keyword fallback ───────────────────────────────
+# Each pattern: (demand_signal_label, problem, desired_outcome, [trigger_keywords])
+_DEMAND_PATTERNS: list[tuple[str, str, str, list[str]]] = [
+    (
+        "reactive-to-planned-maintenance-transition",
+        "Teams responding to breakdowns instead of preventing them, leading to costly emergency repairs and unplanned downtime.",
+        "Shift from reactive to proactive/planned maintenance to reduce unplanned downtime and lower repair costs.",
+        ["reactive maintenance", "unplanned downtime", "breakdown", "emergency repair", "reactive to planned",
+         "planned maintenance", "preventive maintenance", "pm strategy"],
+    ),
+    (
+        "predictive-maintenance-ai-adoption",
+        "Asset failures not predicted in advance; condition monitoring data not being used to trigger timely interventions.",
+        "Use AI and sensor data to predict failures before they occur and prioritize maintenance work.",
+        ["predictive maintenance", "predictive analytics", "condition monitoring", "anomaly detection",
+         "machine learning maintenance", "ai maintenance", "cbm", "condition-based"],
+    ),
+    (
+        "cmms-eam-modernization",
+        "Aging CMMS/EAM systems that lack mobile access, integrations, and modern UX slow down maintenance teams.",
+        "Replace or upgrade legacy maintenance software with a modern cloud-based CMMS/EAM platform.",
+        ["legacy cmms", "cmms upgrade", "eam modernization", "maximo upgrade", "replace cmms",
+         "modern cmms", "cloud eam", "cmms migration", "legacy system"],
+    ),
+    (
+        "iot-sensor-integration-for-assets",
+        "Physical assets lack real-time visibility; teams rely on manual inspection and paper-based records.",
+        "Connect physical assets with IoT sensors to enable real-time monitoring, automated alerts, and data-driven decisions.",
+        ["iot", "sensor", "iiot", "industrial iot", "connected assets", "telemetry", "real-time monitoring",
+         "remote monitoring", "asset tracking", "smart sensor"],
+    ),
+    (
+        "maintenance-workforce-skills-gap",
+        "Experienced maintenance technicians retiring without transferring knowledge; new hires lack hands-on skills.",
+        "Capture expert knowledge, improve training programs, and use digital tools to support less-experienced technicians.",
+        ["skills gap", "workforce shortage", "technician shortage", "knowledge transfer", "aging workforce",
+         "maintenance training", "skilled trades", "labor shortage", "retirement"],
+    ),
+    (
+        "esg-sustainability-asset-reporting",
+        "Growing regulatory and investor pressure to track and report on energy consumption, emissions, and sustainability KPIs from physical assets.",
+        "Integrate asset operational data with ESG/sustainability reporting to demonstrate environmental compliance and progress.",
+        ["esg", "sustainability", "carbon", "emissions", "energy consumption", "net zero", "scope 1", "scope 2",
+         "envizi", "environmental reporting", "green", "decarbonization"],
+    ),
+    (
+        "asset-lifecycle-cost-optimization",
+        "High total cost of ownership for aging assets; difficulty justifying capital expenditure vs. continued maintenance.",
+        "Optimize asset lifecycle decisions — repair vs. replace — using data on asset condition, cost, and risk.",
+        ["asset lifecycle", "total cost of ownership", "tco", "capex", "repair vs replace", "asset investment",
+         "lifecycle cost", "asset strategy", "capital planning"],
+    ),
+    (
+        "work-order-process-digitization",
+        "Paper-based or manual work order processes cause delays, errors, and poor visibility into maintenance backlog.",
+        "Digitize work order management to improve technician productivity, reduce errors, and gain real-time visibility.",
+        ["work order", "work orders", "workorder", "maintenance request", "paper-based", "digital work",
+         "mobile maintenance", "field service", "technician app"],
+    ),
+    (
+        "regulatory-compliance-asset-risk",
+        "Pressure to demonstrate asset safety, inspection compliance, and risk management to regulators and auditors.",
+        "Use asset management systems to automate compliance tracking, inspection scheduling, and audit trail generation.",
+        ["compliance", "regulatory", "audit", "inspection", "safety compliance", "iso 55000", "iso55000",
+         "regulation", "risk management", "certifi"],
+    ),
+    (
+        "facilities-maintenance-optimization",
+        "Facilities teams managing multiple sites struggle with inconsistent maintenance practices, vendor coordination, and space utilization.",
+        "Centralize facilities management with integrated CMMS to standardize processes across sites and reduce operational costs.",
+        ["facilities", "facility management", "building maintenance", "fm", "property management",
+         "space utilization", "janitorial", "hvac", "building systems"],
+    ),
+    (
+        "utility-grid-asset-reliability",
+        "Aging grid infrastructure and increased demand variability create reliability risks and regulatory obligations for utilities.",
+        "Improve asset reliability and grid resilience through better maintenance planning, condition monitoring, and risk prioritization.",
+        ["utility", "utilities", "grid", "transmission", "distribution", "substation", "t&d",
+         "power grid", "electric utility", "water utility", "asset reliability"],
+    ),
+    (
+        "maintenance-backlog-reduction",
+        "Large maintenance backlogs create safety risks, regulatory exposure, and asset deterioration.",
+        "Systematically reduce maintenance backlog through better prioritization, resource allocation, and planning tools.",
+        ["backlog", "maintenance backlog", "deferred maintenance", "overdue", "maintenance planning",
+         "resource planning", "scheduling", "prioritiz"],
+    ),
+]
+
+
 def _fallback_enrichment(title: str, body: str) -> dict[str, Any]:
-    """Simple keyword-based fallback when all LLM providers are unavailable."""
+    """
+    Rule-based enrichment using demand pattern matching.
+    Populates demand_signal, problem, desired_outcome so the Demand Signal Radar
+    shows meaningful patterns even without an LLM provider.
+    """
     text = (title + " " + body).lower()
 
+    # ── Demand signal matching ─────────────────────────────────────────────────
+    demand_signal = ""
+    problem = ""
+    desired_outcome = ""
+    approach = ""
+    best_match_count = 0
+
+    for label, prob, outcome, keywords in _DEMAND_PATTERNS:
+        match_count = sum(1 for k in keywords if k in text)
+        if match_count > best_match_count:
+            best_match_count = match_count
+            demand_signal = label
+            problem = prob
+            desired_outcome = outcome
+
+    # Only assign demand signal if at least 1 keyword matched
+    if best_match_count == 0:
+        demand_signal = ""
+        problem = ""
+        desired_outcome = ""
+
+    # ── Topic tagging ──────────────────────────────────────────────────────────
     TOPIC_KEYWORDS: dict[str, list[str]] = {
-        "predictive maintenance": ["predictive", "prediction", "forecast", "anomaly"],
+        "predictive maintenance": ["predictive", "prediction", "forecast", "anomaly", "condition-based"],
         "CMMS migration":         ["migration", "upgrade", "legacy", "modernize", "transition"],
         "asset management":       ["asset", "eam", "maximo", "lifecycle", "infrastructure"],
         "IoT / sensors":          ["iot", "sensor", "connected", "telemetry", "real-time"],
         "compliance":             ["compliance", "regulatory", "audit", "iso", "regulation"],
-        "cost reduction":         ["cost", "savings", "efficiency", "roi", "budget"],
+        "cost reduction":         ["cost", "savings", "efficiency", "roi", "budget", "tco"],
         "downtime reduction":     ["downtime", "uptime", "reliability", "availability", "mtbf"],
         "work order management":  ["work order", "work orders", "workorder", "maintenance request"],
+        "sustainability / ESG":   ["esg", "sustainability", "carbon", "emissions", "net zero", "envizi"],
+        "workforce / skills":     ["skills gap", "workforce", "technician", "training", "knowledge"],
+        "facilities":             ["facilities", "facility", "building", "fm", "hvac"],
+        "utilities / grid":       ["utility", "grid", "transmission", "distribution", "substation"],
     }
     topics = [t for t, kws in TOPIC_KEYWORDS.items() if any(k in text for k in kws)][:5]
 
+    # ── Sentiment ──────────────────────────────────────────────────────────────
     sentiment = "neutral"
-    if any(w in text for w in ["great", "excellent", "love", "best", "improve"]):
+    if any(w in text for w in ["great", "excellent", "love", "best", "improve", "success", "benefit"]):
         sentiment = "positive"
-    elif any(w in text for w in ["bad", "issue", "problem", "fail", "broken", "slow", "struggle"]):
+    elif any(w in text for w in ["bad", "issue", "problem", "fail", "broken", "slow", "struggle", "challenge", "risk"]):
         sentiment = "negative"
 
-    relevance_score = min(1.0, 0.3 + len(topics) * 0.15)
-
+    # ── Signal type ────────────────────────────────────────────────────────────
     signal_type = "general"
-    if any(w in text for w in ["need", "want", "wish", "looking for", "require"]):
+    if any(w in text for w in ["need", "want", "wish", "looking for", "require", "how do i", "how to"]):
         signal_type = "demand"
-    elif any(w in text for w in ["issue", "problem", "fail", "broken", "hate"]):
+    elif any(w in text for w in ["issue", "problem", "fail", "broken", "hate", "frustrated"]):
         signal_type = "complaint"
-    elif any(w in text for w in ["report", "analyst", "gartner", "idc", "verdantix", "arc"]):
+    elif any(w in text for w in ["report", "analyst", "gartner", "idc", "verdantix", "arc advisory", "forrester"]):
         signal_type = "analyst"
 
+    # ── Persona inference ──────────────────────────────────────────────────────
+    persona = "unknown"
+    if any(w in text for w in ["maintenance manager", "maintenance director", "reliability engineer"]):
+        persona = "Maintenance Manager"
+    elif any(w in text for w in ["facility manager", "facilities director", "fm director"]):
+        persona = "Facilities Manager"
+    elif any(w in text for w in ["plant manager", "plant engineer", "operations manager"]):
+        persona = "Plant Manager"
+    elif any(w in text for w in ["cio", "it director", "enterprise architect"]):
+        persona = "IT/OT Leader"
+
+    # ── Industry inference ─────────────────────────────────────────────────────
+    industry = "unknown"
+    if any(w in text for w in ["utility", "utilities", "grid", "power plant", "water"]):
+        industry = "Utilities"
+    elif any(w in text for w in ["manufacturing", "plant", "factory", "production"]):
+        industry = "Manufacturing"
+    elif any(w in text for w in ["facilities", "building", "real estate", "campus"]):
+        industry = "Facilities"
+    elif any(w in text for w in ["oil", "gas", "refinery", "pipeline", "upstream"]):
+        industry = "Oil & Gas"
+    elif any(w in text for w in ["transport", "fleet", "rail", "aviation", "transit"]):
+        industry = "Transportation"
+
+    # ── Author / org type ──────────────────────────────────────────────────────
+    author_type = "unknown"
+    org_type = "unknown"
+    if any(w in text for w in ["we use", "our team", "our plant", "my company", "we have", "we are"]):
+        author_type = "practitioner"
+        org_type = "asset_owner"
+    elif any(w in text for w in ["our solution", "our product", "we offer", "our platform"]):
+        author_type = "vendor"
+        org_type = "vendor"
+
+    evidence_weight = min(5, best_match_count + (1 if author_type == "practitioner" else 0))
+    relevance_score = min(1.0, 0.3 + len(topics) * 0.12 + best_match_count * 0.08)
+
     return {
-        "demand_signal":   "",
-        "problem":         "",
-        "desired_outcome": "",
-        "approach":        "",
-        "persona":         "unknown",
-        "industry":        "unknown",
-        "org_type":        "unknown",
-        "author_type":     "unknown",
-        "evidence_weight": 0,
+        "demand_signal":   demand_signal,
+        "problem":         problem,
+        "desired_outcome": desired_outcome,
+        "approach":        approach,
+        "persona":         persona,
+        "industry":        industry,
+        "org_type":        org_type,
+        "author_type":     author_type,
+        "evidence_weight": evidence_weight,
         "topics":          topics if topics else ["asset management"],
         "sentiment":       sentiment,
         "relevance_score": relevance_score,
