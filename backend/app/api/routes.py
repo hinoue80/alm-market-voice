@@ -687,6 +687,7 @@ def enrich_providers():
         "active_provider": active,
         "bob": {
             "configured": bob_available,
+            "key_length": len(cfg.bob_api_key),  # 0 = not set; helps diagnose env var issues
             "instance_id_set": bool(cfg.bob_instance_id),
             "team_id_set": bool(cfg.bob_team_id),
         },
