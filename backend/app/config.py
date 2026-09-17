@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     watsonx_project_id: str = ""
     watsonx_url: str = "https://us-south.ml.cloud.ibm.com"
 
+    # IBM Bob inference API (OpenAI-style Chat Completions)
+    # Create an Inference-scoped key at bob.ibm.com → Admin → API Keys
+    # BOB_INSTANCE_ID and BOB_TEAM_ID are shown on your Bob subscription page
+    bob_api_key: str = ""
+    bob_instance_id: str = ""
+    bob_team_id: str = ""
+    bob_url: str = "https://api.us-east.bob.ibm.com/inference/v1/chat/completions"
+
     # Anthropic Claude (enrichment — fast, high quality, low cost)
     # Get key at https://console.anthropic.com/settings/keys
     # Uses claude-haiku-3-5 (~$0.001 per signal). Leave blank to disable.

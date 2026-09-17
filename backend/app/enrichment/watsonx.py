@@ -311,6 +311,77 @@ def _call_openai(text: str) -> dict[str, Any] | None:
 
 
 
+# ── IBM Bob provider ─────────────────────────────────────────────────────────
+
+def _call_bob(text: str) -> dict[str, Any] | None:
+    """
+    Call IBM Bob's OpenAI-style Chat Completions endpoint.
+    Uses an Inference-scoped API key — no watsonx quota, IBM-approved.
+    Returns parsed enrichment dict or None on any error.
+    """
+    if not settings.bob_api_key:
+        return None
+
+    headers = {
+        "Authorization": f"Apikey {settings.bob_api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-Platform-Name": "IBM Bob",
+        "X-Platform-Version": "2.0.1",
+        "X-Mode": "ask",
+    }
+    if settings.bob_instance_id:
+        headers["x-instance-id"] = settings.bob_instance_id
+    if settings.bob_team_id:
+        headers["x-team-id"] = settings.bob_team_id
+
+    prompt = PROMPT_TEMPLATE.format(text=text)
+
+    try:
+        resp = httpx.post(
+            settings.bob_url,
+            json={
+                "model": "premium",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a JSON-only market intelligence analyst. "
+                            "Output a single valid JSON object and nothing else. "
+                            "No markdown fences, no explanation."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "reasoning_effort": "low",
+                "temperature": 0.1,
+                "max_tokens": 600,
+                "stream": False,
+            },
+            headers=headers,
+            timeout=45,
+        )
+
+        if resp.status_code == 401:
+            logger.warning("Bob API key invalid or expired — skipping Bob provider")
+            settings.bob_api_key = ""  # stop retrying this session
+            return None
+
+        if resp.status_code == 429:
+            logger.warning("Bob inference rate limit — falling through to next provider")
+            return None
+
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"].strip()
+        result = _parse_response(content)
+        logger.debug("Bob enrichment succeeded")
+        return result
+
+    except Exception as exc:
+        logger.warning("Bob enrichment failed: %s", exc)
+        return None
+
+
 # ── Anthropic provider ───────────────────────────────────────────────────────
 
 def _call_anthropic(text: str) -> dict[str, Any] | None:
@@ -417,35 +488,41 @@ def _call_ollama(text: str) -> dict[str, Any] | None:
 def enrich_signal(title: str, body: str) -> dict[str, Any]:
     """
     Enrich a signal using the best available provider:
-      1. watsonx.ai  — primary (skipped if quota exhausted this session)
-      2. Anthropic   — fast, high quality (skipped if key blank/invalid)
-      3. OpenAI      — fallback when watsonx quota is hit
-      4. Ollama      — local free fallback (llama3.2, no quota)
-      5. Keyword     — always-available offline fallback
+      1. IBM Bob     — primary (IBM-approved, Inference API key, no watsonx quota)
+      2. watsonx.ai  — secondary (skipped if quota exhausted this session)
+      3. Anthropic   — fast, high quality (skipped if key blank/invalid)
+      4. OpenAI      — fallback when watsonx quota is hit
+      5. Ollama      — local free fallback (llama3.2, no quota)
+      6. Keyword     — always-available offline fallback
     """
     text = f"{title}\n\n{body}"[:2500]
 
-    # 1. Try watsonx.ai
+    # 1. Try IBM Bob (primary — IBM-approved, no external vendor dependency)
+    result = _call_bob(text)
+    if result is not None:
+        return result
+
+    # 2. Try watsonx.ai
     result = _call_watsonx(text)
     if result is not None:
         return result
 
-    # 2. Try Anthropic
+    # 3. Try Anthropic
     result = _call_anthropic(text)
     if result is not None:
         return result
 
-    # 3. Try OpenAI
+    # 4. Try OpenAI
     result = _call_openai(text)
     if result is not None:
         return result
 
-    # 4. Try Ollama (local)
+    # 5. Try Ollama (local)
     result = _call_ollama(text)
     if result is not None:
         return result
 
-    # 5. Keyword fallback
+    # 6. Keyword fallback
     logger.debug("All LLM providers unavailable — using keyword fallback")
     return _fallback_enrichment(title, body)
 

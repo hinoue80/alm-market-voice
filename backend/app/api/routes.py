@@ -657,6 +657,7 @@ def enrich_providers():
     from app.enrichment.watsonx import _watsonx_quota_exhausted, _openai_credits_exhausted
     from app.config import settings as cfg
 
+    bob_available       = bool(cfg.bob_api_key)
     watsonx_available   = bool(cfg.watsonx_api_key and cfg.watsonx_project_id) and not _watsonx_quota_exhausted
     anthropic_available = bool(cfg.anthropic_api_key)
     openai_available    = bool(cfg.openai_api_key) and not _openai_credits_exhausted
@@ -669,7 +670,9 @@ def enrich_providers():
     except Exception:
         pass
 
-    if watsonx_available:
+    if bob_available:
+        active = "bob"
+    elif watsonx_available:
         active = "watsonx"
     elif anthropic_available:
         active = "anthropic"
@@ -682,6 +685,11 @@ def enrich_providers():
 
     return {
         "active_provider": active,
+        "bob": {
+            "configured": bob_available,
+            "instance_id_set": bool(cfg.bob_instance_id),
+            "team_id_set": bool(cfg.bob_team_id),
+        },
         "watsonx": {
             "configured": bool(cfg.watsonx_api_key and cfg.watsonx_project_id),
             "quota_exhausted": _watsonx_quota_exhausted,
